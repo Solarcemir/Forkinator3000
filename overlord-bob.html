@@ -119,6 +119,10 @@ input[type=range]{width:100%;accent-color:var(--hot);margin:6px 0 0}
 .card .k{position:absolute;right:10px;top:8px;font-size:.7rem;font-weight:700;color:var(--muted);background:var(--wall);border-radius:6px;padding:1px 6px;font-family:Nunito,sans-serif}
 .card small{display:block;color:var(--muted);font-family:Nunito,sans-serif;font-size:.8rem;font-weight:700}
 .pill{background:#6b6574;color:#fff;border:0;border-radius:999px;padding:5px 14px;font-size:.82rem;font-weight:700}
+.sizepop{position:fixed;transform:translate(-50%,0);z-index:15;pointer-events:none;font-family:Fredoka,sans-serif;font-weight:700;font-size:clamp(1.3rem,3vw,2rem);
+  padding:6px 16px;border-radius:999px;color:#fff;box-shadow:0 6px 16px rgba(0,0,0,.25);animation:pop 1.6s ease-out forwards;white-space:nowrap}
+.sizepop.fat{background:#e5484d}.sizepop.slim{background:#2f9e66}
+@keyframes pop{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}15%{opacity:1;transform:translate(-50%,0) scale(1.15)}30%{transform:translate(-50%,0) scale(1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-50px)}}
 .askf{display:none;gap:8px;width:min(560px,100%)}
 .askf.on{display:flex}
 .askf input{flex:1;min-width:0;font:inherit;padding:10px 14px;border-radius:999px;border:1px solid var(--cardline);background:var(--card);color:var(--ink)}
@@ -316,7 +320,7 @@ var $=function(id){return document.getElementById(id)};
 // Drop your Plankton clips in ./sounds/ and list them here. One is picked at random per flick.
 var PLANKTON_SOUNDS=["sounds/plankton.mp3","sounds/plankton2.mp3","sounds/plankton3.mp3"];
 var PLANKTON_IMG="assets/plankton.jpeg";   // fades in and out on every flick
-var PROXY_URL="";                          // paste your Cloudflare Worker URL (see worker/) to make Bob a real, useless AI
+var PROXY_URL="/api/bob";                  // served by server.py (Gemini, key in .env); falls back to canned jokes if it fails
 var STEP_CAL=15, KNEE_GAP=0.05;            // run mode: calories per step, knee lift needed (fraction of frame height)
 // Pou face parts (eyes + smile cut out of assets/pou.png). ax/ay = eye midpoint inside the eyes image.
 var POU={eyes:{src:"assets/pou-eyes.png",ax:56,ay:34},smile:{src:"assets/pou-smile.png",dx:-60,dy:30}};
@@ -373,7 +377,7 @@ function plankton(){
 function fatness(){return Math.max(0,Math.min(1,1-state.cal/GOAL))}
 var EYE={l:[122,0],r:[178,0]};
 function buildBob(pre,face,googly,expr,f){
-  var m=1-f, cx=150, by=268, hw=84+44*f, ty=40+22*f, tw=60+20*f;
+  var m=1-f, cx=150, by=268, hw=66+78*f, ty=26+54*f, tw=54+40*f;
   var ey=ty+74, er=expr==="shock"?27:23;
   EYE.l=[cx-28,ey];EYE.r=[cx+28,ey];
   var usePou=!face&&POU.eyes.ok&&POU.smile.ok;
@@ -446,7 +450,25 @@ function buildBob(pre,face,googly,expr,f){
   return s;
 }
 var svg=$("bob");
-function drawBob(){svg.innerHTML=buildBob("b",state.face,state.googly,state.expr,fatness())}
+/* shownF eases toward fatness() so every change visibly inflates/deflates Bob */
+var shownF=null,tweenRAF=0;
+function drawBob(){if(shownF===null)shownF=fatness();svg.innerHTML=buildBob("b",state.face,state.googly,state.expr,shownF)}
+function bobKg(f){return Math.round(45+125*f)}
+function tweenBob(){
+  var target=fatness();if(shownF===null){shownF=target;drawBob();return}
+  var from=shownF,d=target-from;if(Math.abs(d)<.002){drawBob();return}
+  sizePop(d,bobKg(target)-bobKg(from));
+  cancelAnimationFrame(tweenRAF);var t0=performance.now(),dur=900;
+  (function step(now){var k=Math.min(1,(now-t0)/dur),e=k<1?1-Math.pow(1-k,3)*Math.cos(k*9)*1:1;
+    shownF=from+d*Math.min(1.08,e);drawBob();if(k<1)tweenRAF=requestAnimationFrame(step);else{shownF=target;drawBob()}})(t0);
+}
+function sizePop(d,kg){
+  var r=svg.getBoundingClientRect(),el=document.createElement("div");
+  el.className="sizepop "+(d>0?"fat":"slim");
+  el.textContent=d>0?"🍔 FATTER +"+kg+" kg":"💪 SLIMMER "+kg+" kg";
+  el.style.left=(r.left+r.width/2)+"px";el.style.top=(r.top+r.height*.2)+"px";
+  document.body.appendChild(el);setTimeout(function(){el.remove()},1600);
+}
 ["eyes","smile"].forEach(function(k){var im=new Image();im.onload=function(){POU[k].ok=true;POU[k].w=im.naturalWidth;POU[k].h=im.naturalHeight;drawBob()};im.src=POU[k].src});
 
 /* pupils follow the pointer */
@@ -492,8 +514,8 @@ function render(){
   $("bar").style.width=Math.round(m*100)+"%";
   $("tier").textContent=Math.round(m*100)+"%";
   $("rank").textContent="Rank "+(idx+1)+"/5";
-  $("bobname").textContent=names[idx];
-  drawBob();renderMenu();
+  $("bobname").textContent=names[idx]+" · "+bobKg(fatness())+" kg";
+  tweenBob();renderMenu();
   if(lastIdx!==-1&&idx!==lastIdx){
     if(idx<lastIdx){idx===0?sfx.fanfare():sfx.flex();setTimeout(function(){say(moods[idx])},1400)}
     else{sfx.sad();setTimeout(function(){say(moods[idx])},1400)}
@@ -627,7 +649,7 @@ $("askf").onsubmit=function(e){e.preventDefault();var q=$("q").value.trim();if(!
   var done=function(t){say(t);sfx.boing();anim("jolt")};
   if(!PROXY_URL){setTimeout(function(){done(pick())},1300);return}
   fetch(PROXY_URL,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({q:q})})
-    .then(function(r){return r.json()}).then(function(d){done(d.a||pick())})
+    .then(function(r){return r.json()}).then(function(d){if(d.error)console.warn("BobGPT:",d.error);done(d.a||pick())})
     .catch(function(){done(pick())});
 };
 $("q").addEventListener("keydown",function(e){if(e.key==="Escape"){$("askf").classList.remove("on");$("askbtn").classList.remove("hide")}});

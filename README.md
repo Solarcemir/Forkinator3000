@@ -7,7 +7,8 @@ overlord-bob.html                    the web UI (single file, no build step)
 firmware/forkinator/forkinator.ino   ESP32 firmware (Arduino)
 assets/                              Pou face parts (pou-eyes/smile.png) and the plankton image
 sounds/                              Plankton clips (plankton.mp3 included, add plankton2/3.mp3 if you like)
-worker/bobgpt-worker.js              optional Cloudflare Worker that makes Bob's chat a real (useless) AI
+server.py                            local server: serves the page + proxies Bob's chat to Gemini
+worker/bobgpt-worker.js              optional Cloudflare Worker, only if you host the page online
 ```
 
 ## 1. Run the web UI
@@ -17,8 +18,22 @@ The page has to be served over `http://localhost`. If you open it straight from 
 ```bash
 git clone https://github.com/Solarcemir/Forkinator3000.git
 cd Forkinator3000
-python -m http.server 8765
 ```
+
+Create a `.env` file in the project folder with your [Gemini API key](https://aistudio.google.com/apikey). It's in `.gitignore`, never commit it:
+
+```
+GEMINI_API_KEY=your-key-here
+GEMINI_MODEL=gemini-flash-lite-latest
+```
+
+Then start the server (Python 3, no packages needed):
+
+```bash
+python server.py
+```
+
+Without a `.env`, everything still works and Bob answers with canned jokes instead of Gemini.
 
 Then open **http://localhost:8765/overlord-bob.html** in **Chrome or Edge** on desktop. Web Serial only works in those two.
 
@@ -98,8 +113,14 @@ Bob's default face is Pou's eyes and smile (`assets/pou-eyes.png`, `assets/pou-s
 ### Run on the spot
 Press `5`, allow the camera and stand back so your knees are in frame. Each alternating knee lift counts as a step (`STEP_CAL` = 15 cal) and makes Bob slimmer. Tune `STEP_CAL` and `KNEE_GAP` at the top of the script. The pose model (MediaPipe) loads from a CDN, so this needs internet. Video never leaves the browser.
 
-### Real BobGPT
-By default Bob answers with canned jokes. For a real but useless AI, deploy `worker/bobgpt-worker.js`:
+### BobGPT (Gemini)
+Bob's chat goes to `POST /api/bob` on `server.py`, which calls Gemini with a system prompt that makes Bob confidently useless. The key stays in `.env` on the server and is never sent to the browser (the server also refuses to serve `.env`). If Gemini fails, Bob falls back to canned jokes. Edit `SYSTEM` in `server.py` to change his personality.
+
+### Fatter / slimmer
+Bob's size changes a lot between Chunky (≈170 kg) and Overlord (≈45 kg). Every change animates the body inflating or deflating and pops a red **FATTER +kg** or green **SLIMMER kg** badge. His current weight is in the name tag.
+
+### Hosting online (optional)
+`server.py` only runs locally. To host the page somewhere static (GitHub Pages), deploy `worker/bobgpt-worker.js` instead and point `PROXY_URL` to it:
 
 ```bash
 npm create cloudflare@latest bobgpt-proxy   # paste the worker code into src/index.js
