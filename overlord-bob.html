@@ -272,7 +272,7 @@ function parseLine(l){l=(l||"").trim().toUpperCase();if(!l)return;
 }
 
 /* Memes: one pops up on every hit. Add your own {src,cap} entries (gif/svg/png paths) */
-var PLANK_IMG="assets/plankton.png",PLANK_SND="assets/plankton.mp3";
+var PLANK_IMG="assets/plankton.jpeg",PLANK_SND="assets/plankton.mp3";
 var plImg=false,plSnd=false,plAud=new Audio(PLANK_SND);plAud.preload="auto";
 plAud.addEventListener("canplaythrough",function(){plSnd=true});
 $("memeimg").onload=function(){plImg=true};$("memeimg").src=PLANK_IMG;
