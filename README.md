@@ -54,44 +54,28 @@ firmware/forkinator/forkinator.ino   ESP32 firmware (Arduino)
 assets/                              Pou eyes/smile and the Plankton image
 sounds/                              Plankton sound(s)
 worker/bobgpt-worker.js              optional Cloudflare Worker, only for hosting the page online
-.env                                 your Gemini key (you create it, never committed)
+start.bat / start.sh                 one-click launchers (Windows / Mac-Linux)
+.env.example                         template for your keys; start.bat copies it to .env (never committed)
 ```
 
-## 1. Run the web UI
+## 1. Run it (one install, one double-click)
 
-You need Python 3 (no extra packages) and Chrome or Edge on desktop.
+**The only thing to install is [Python 3](https://www.python.org/downloads/).** On Windows, tick **"Add python.exe to PATH"** in the installer. No pip, no npm, no packages.
 
-```bash
-git clone https://github.com/Solarcemir/Forkinator3000.git
-cd Forkinator3000
-git checkout pou
-```
+1. Get the project: **Code → Download ZIP** on GitHub and unzip it, or `git clone https://github.com/Solarcemir/Forkinator3000.git`.
+2. Start it:
+   - **Windows:** double-click **`start.bat`**.
+   - **Mac / Linux:** run `./start.sh` in a terminal.
+3. The page opens by itself in your browser at **http://localhost:8765/overlord-bob.html**. Use **Chrome or Edge**: they're the only browsers that can connect to the fork over USB.
 
-Create a file called `.env` in the project folder with a [Gemini API key](https://aistudio.google.com/apikey):
+Keep the black window open while you use it. Close it to stop.
 
-```
-GEMINI_API_KEY=your-key-here
-GEMINI_MODEL=gemini-flash-lite-latest
-
-# optional: ElevenLabs voice (free tier works). Without it, the browser voice is used.
-ELEVENLABS_API_KEY=your-elevenlabs-key
-ELEVENLABS_VOICE=JBFqnCBsd6RMkjVDRZzb        # default voice ID for every style
-ELEVENLABS_VOICE_MEXICANO=voice-id-here      # optional, one per style: _BLOB, _CANADIAN, _GYM, _PIRATE, ...
-```
-
-Find voice IDs in ElevenLabs under **Voices** (each voice has a "Copy voice ID" button). The default model is `eleven_flash_v2_5`, which speaks Spanish too.
-
-Start the server:
-
-```bash
-python server.py
-```
-
-Open **http://localhost:8765/overlord-bob.html**.
-
-- Without a `.env`, everything still works, and Bob answers with canned jokes instead of Gemini.
-- Don't open the HTML file directly from disk. The camera and USB connection only work over `http://localhost`.
-- Face detection and jumping jacks load the MediaPipe models from the internet the first time.
+**Notes:**
+- **The AI (optional):** the first run creates a `.env` file. Paste a free [Gemini API key](https://aistudio.google.com/apikey) after `GEMINI_API_KEY=`, then start again. Without a key everything works and Bob uses canned jokes.
+- **Better voice (optional):** add `ELEVENLABS_API_KEY=` from [elevenlabs.io](https://elevenlabs.io) to `.env`. Without it, the browser's free voice is used. To give each style its own voice, set `ELEVENLABS_VOICE_MEXICANO=<voice id>` etc. Voice IDs are in ElevenLabs under **Voices → Copy voice ID**.
+- **Already running?** Double-clicking `start.bat` again just opens the page.
+- **Don't open the HTML file directly from the folder.** The camera, USB and AI only work through the server.
+- **Internet needed:** the first time, face detection and jumping jacks download their models.
 
 ### Controls
 

@@ -202,6 +202,11 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)
 
+    def log_message(self, fmt, *args):
+        # keep the window readable: only show errors, not every file request
+        if len(args) > 1 and str(args[1]).startswith(("4", "5")) and str(args[1]) != "404":
+            super().log_message(fmt, *args)
+
     def do_GET(self):
         # never serve secrets or the server source
         if self.path.split("?")[0].lstrip("/") in (".env", "server.py") or "/.git" in self.path:
@@ -277,5 +282,27 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"Forkinator on http://localhost:{PORT}/overlord-bob.html  (Gemini: {'on' if KEY else 'OFF, no key'}, model {MODEL}; voice: {'ElevenLabs' if EL_KEY else 'browser'})")
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    import sys
+    import threading
+    import webbrowser
+
+    page = f"http://localhost:{PORT}/overlord-bob.html"
+    try:
+        httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    except OSError:
+        # already running (e.g. double-clicked twice): just open the page
+        print(f"Forkinator is already running. Opening {page}")
+        webbrowser.open(page)
+        sys.exit(0)
+    print("")
+    print("  FORKINATOR 3000 is running")
+    print(f"  Open: {page}  (use Chrome or Edge)")
+    print(f"  Gemini: {'on' if KEY else 'OFF (no key in .env, Bob uses canned jokes)'} | voice: {'ElevenLabs' if EL_KEY else 'browser'}")
+    print("  Close this window or press Ctrl+C to stop.")
+    print("")
+    if "--no-browser" not in sys.argv:
+        threading.Timer(1.0, webbrowser.open, args=(page,)).start()
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("Bye.")
