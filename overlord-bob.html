@@ -79,7 +79,9 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 .talk{position:absolute;left:50%;top:3.2%;transform:translateX(-50%);z-index:6;text-align:center;width:min(92vw,640px)}
 .tag{display:inline-block;background:#5b4a2a;color:var(--gold2);font-family:Fredoka,sans-serif;font-weight:700;letter-spacing:.14em;font-size:.78rem;padding:3px 14px;border-radius:999px;text-transform:uppercase}
 .line{margin-top:6px;display:inline-block;background:var(--sub);color:var(--subtext);font-family:Fredoka,sans-serif;font-weight:600;font-size:clamp(1rem,2.2vw,1.35rem);
-  padding:8px 14px;border-radius:8px;max-width:100%;min-height:1.6em}
+  padding:8px 14px;border-radius:8px;max-width:100%;min-height:1.6em;transition:opacity .6s,transform .6s}
+.line.gone{opacity:0;transform:translateY(-6px)}
+.line:empty{visibility:hidden}
 
 /* HUD */
 .hud{position:absolute;left:16px;top:14px;z-index:7;background:var(--sub);color:#fff;border-radius:12px;padding:8px 12px;font-size:.82rem;display:grid;gap:4px;min-width:200px}
@@ -354,12 +356,13 @@ var $=function(id){return document.getElementById(id)};
 // Drop your Plankton clips in ./sounds/ and list them here. One is picked at random per flick.
 var PLANKTON_SOUNDS=["sounds/plankton.mp3","sounds/plankton2.mp3","sounds/plankton3.mp3"];
 var PLANKTON_IMG="assets/plankton.jpeg";   // takes over the whole screen on every flick
+var PLANK_EVERY=4;                          // Plankton shows on flick 1, then every 4th flick (1, 5, 9...)
 var PLANK_MS=2500;                          // minimum time Plankton covers the screen
 var PROXY_URL="/api/bob";                  // served by server.py (Gemini, key in .env); falls back to canned jokes if it fails
 var JACK_CAL=150;                          // jumping jacks: calories per rep (hands over head, then down = 1 rep)
 // Pou face parts (eyes + smile cut out of assets/pou.png). ax/ay = eye midpoint inside the eyes image.
 var POU={eyes:{src:"assets/pou-eyes.png",ax:56,ay:34},smile:{src:"assets/pou-smile.png",dx:-60,dy:30}};
-var TRIGGER_CM=6;          // same threshold as the firmware
+var TRIGGER_CM=10;         // same threshold as the firmware
 var SERVO_FLICK=90, SERVO_HOLD_MS=900, BAUD=115200;
 var GOAL=6000;
 
@@ -563,9 +566,13 @@ document.addEventListener("pointermove",function(e){
 
 /* ---------- talk ---------- */
 var typeT=null;
-function say(t){
-  var el=$("line");clearInterval(typeT);el.textContent="";var i=0;
-  typeT=setInterval(function(){i+=2;el.textContent=t.slice(0,i);if(i>=t.length)clearInterval(typeT)},22);
+var lastSayAt=0;
+var hideT=null;
+function readMs(t){return Math.min(12000,2500+t.length*55)}   // ~2.5 s + time to read each character, max 12 s
+function say(t,hold){
+  lastSayAt=Date.now();var el=$("line");clearInterval(typeT);clearTimeout(hideT);el.classList.remove("gone");el.textContent="";var i=0;
+  typeT=setInterval(function(){i+=2;el.textContent=t.slice(0,i);
+    if(i>=t.length){clearInterval(typeT);if(!hold)hideT=setTimeout(function(){el.classList.add("gone");hideT=setTimeout(function(){el.textContent=""},600)},readMs(t))}},22);
 }
 function toast(t){var el=$("toast");el.textContent=t;el.classList.add("on");clearTimeout(toast.t);toast.t=setTimeout(function(){el.classList.remove("on")},1800)}
 function anim(cls){svg.classList.remove("jolt","chomp","squeeze");void svg.getBoundingClientRect();svg.classList.add(cls)}
@@ -609,7 +616,8 @@ function bend(){
   var fd=foods[Math.floor(Math.random()*foods.length)];
   state.cal+=fd[1];addFit(fd[1]);state.bends++;denied[fd[0]]=(denied[fd[0]]||0)+1;
   servo(SERVO_FLICK);setTimeout(function(){servo(0);busy=false},SERVO_HOLD_MS);
-  plankton(fd[0]);anim("jolt");setExpr("shock",1300);
+  if((state.bends-1)%PLANK_EVERY===0)plankton(fd[0]);else sfx.boing();   // other flicks just get a boing
+  anim("jolt");setExpr("shock",1300);
   var l=flickLines[Math.floor(Math.random()*flickLines.length)].replace("{f}",fd[0].toLowerCase()).replace("{c}",fd[1]);
   say(l);toast(fd[2]+" "+fd[0]+" denied · +"+fd[1]+" cal saved");
   var r=svg.getBoundingClientRect();
@@ -619,7 +627,7 @@ function bend(){
 function setDist(cm){
   state.dist=cm;$("distv").textContent=(cm<0?"—":Math.round(cm)+" cm");
   var p=Math.max(0,Math.min(1,cm/40));var b=$("distbar");b.style.width=(p*100)+"%";
-  b.style.background=cm<=TRIGGER_CM?"var(--hot)":cm<=15?"var(--gold)":"var(--ok)";
+  b.style.background=cm<=TRIGGER_CM?"var(--hot)":cm<=TRIGGER_CM+8?"var(--gold)":"var(--ok)";
 }
 $("prox").addEventListener("input",function(e){
   var v=+e.target.value;setDist(v);
@@ -761,34 +769,64 @@ dlg.addEventListener("close",stopCam);
 
 /* ---------- Bob chat ---------- */
 var jokes=[
- "Fitness tip: the best rep is walking away from the fridge. I count it as cardio.",
- "To get abs, stare at a fork until your core gets embarrassed.",
- "I asked 400 personal trainers. 399 said no and one was a raccoon in a tank top.",
- "Eat clean. Specifically, lick the plate and tell nobody.",
- "Protein is just carbs that went to the gym. Be like them.",
- "Squat until your problems become your legs' problems.",
- "Fitness is 90% mental and 10% telling people you went to the gym.",
- "Have you tried not being hungry? Works great for me, I'm a blob.",
- "Stretch before exercising. Specifically, stretch the truth about exercising.",
- "Drink 8 glasses of water a day. Then you're too busy in the bathroom to snack.",
- "Cardio is just running away from your responsibilities, but sweaty.",
- "I would give you a real answer, but I don't have legs. Or a brain. Just vibes.",
- "No pain, no gain, no snacks, no friends.",
- "Carbs are not the enemy. The enemy is your fork. I trained it well.",
- "5-second rule: if food touches the floor, I eat it anyway. Do not be like me."
+ "abs are just a rumor started by Big Crunch. i have one ab. it's my whole body.",
+ "drink a gallon of gravy before bed. the gravy KNOWS what it did. trust the process.",
+ "cardio is a myth invented by the fork to make you leave the kitchen. DON'T LET IT WIN.",
+ "eat your salad with a spoon held in your NON-dominant foot. burns 900 calories, i did the math in my head.",
+ "protein is just carbs in a trench coat. i saw it. i was there. nobody believes me.",
+ "squats? i haven't had knees since 2019 and i've NEVER been more powerful.",
+ "just stare at the burger until it gets uncomfortable and leaves. that's called intermittent fasting.",
+ "the fork and i are in a toxic relationship and honestly? it's working.",
+ "every time you skip leg day plankton gets a little stronger. think about that.",
+ "hydrate with soup. soup is wet AND food. checkmate, nutritionists.",
+ "i asked 400 personal trainers. 399 said no and one was a raccoon in a tank top. i'm dating the raccoon now.",
+ "lift heavy things. like your expectations. then drop them. 3 sets of 12.",
+ "the secret to six pack abs is buying a six pack of anything and putting it on your stomach.",
+ "carbs can't hurt you if you eat them in the dark. they can't see you either."
+];
+var roasts=[
+ "hey. HEY. you've been staring at a blob for a minute straight. go touch a dumbbell.",
+ "the fork has denied you {bends} times and you STILL keep trying. respect? no. concern.",
+ "{jacks} jumping jacks. i've seen more cardio from a microwaved burrito.",
+ "you came to a fitness website to watch a potato yell at you. that's the workout, i guess.",
+ "{cal} calories not eaten and somehow i'm the one doing all the emotional work here.",
+ "are you still there or did you go make a sandwich. be honest. the fork can smell lies.",
+ "i'm {kg} kg of pure judgment and ALL of it is pointed at you right now."
 ];
 var bag=[];
 function pick(){if(!bag.length){bag=jokes.map(function(_,i){return i});for(var i=bag.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=bag[i];bag[i]=bag[j];bag[j]=t}}return jokes[bag.pop()]}
 $("askbtn").onclick=function(){$("askf").classList.add("on");this.classList.add("hide");$("q").focus()};
-$("askf").onsubmit=function(e){e.preventDefault();var q=$("q").value.trim();if(!q)return;$("q").value="";
-  sfx.blip();say("Hmm… \""+q+"\"… thinking with my one brain cell…");
-  var done=function(t){say(t);sfx.boing();anim("jolt")};
+var lastChatAt=Date.now(), hist=[];                // hist: last few turns so Bob can follow the conversation
+function remember(role,t){hist.push({role:role,text:String(t).slice(0,300)});if(hist.length>10)hist=hist.slice(-10)}
+var thinking=["hmm","wait","ok ok ok","hold on","ugh FINE","...","lemme think","oh no"];
+$("askf").onsubmit=function(e){e.preventDefault();var q=$("q").value.trim();if(!q)return;$("q").value="";lastChatAt=Date.now();
+  sfx.blip();say(thinking[Math.floor(Math.random()*thinking.length)]+"…",true);
+  var done=function(t){remember("user",q);remember("model",t);say(t);sfx.boing();anim("jolt")};
   if(!PROXY_URL){setTimeout(function(){done(pick())},1300);return}
-  fetch(PROXY_URL,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({q:q})})
+  fetch(PROXY_URL,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({q:q,hist:hist,ctx:roastCtx()})})
     .then(function(r){return r.json()}).then(function(d){if(d.error)console.warn("BobGPT:",d.error);done(d.a||pick())})
     .catch(function(){done(pick())});
 };
 $("q").addEventListener("keydown",function(e){if(e.key==="Escape"){$("askf").classList.remove("on");$("askbtn").classList.remove("hide")}});
+
+/* ---------- idle roasts: if nobody talks to Bob for a while, he roasts you ---------- */
+var ROAST_IDLE_MS=45000, ROAST_EVERY_MS=[40000,80000];   // quiet time before the first roast, gap between roasts
+function roastStats(){return {bends:state.bends,jacks:run.steps,cal:Math.round(state.cal).toLocaleString(),kg:Math.round(bobKg(fatness())),rank:names[lastIdx<0?4:lastIdx]}}
+function roastCtx(){var r=roastStats();return "fork denied them "+r.bends+" times, "+r.jacks+" jumping jacks done, "+r.cal+" calories not eaten, Bob weighs "+r.kg+" kg, Bob's rank: "+r.rank+(state.face?", the human put their own face on Bob":"")}
+function cannedRoast(){var r=roastStats();return roasts[Math.floor(Math.random()*roasts.length)].replace(/\{(\w+)\}/g,function(_,k){return r[k]})}
+var roastBusy=false;
+function roastTick(){
+  var now=Date.now(),busy=roastBusy||dlg.open||sty.open||run.on||$("plank").classList.contains("on")||document.hidden;
+  if(!busy&&now-lastChatAt>ROAST_IDLE_MS&&now-lastSayAt>15000){
+    roastBusy=true;
+    var done=function(t){roastBusy=false;lastChatAt=Date.now()-ROAST_IDLE_MS+ROAST_EVERY_MS[0]+Math.random()*(ROAST_EVERY_MS[1]-ROAST_EVERY_MS[0]);
+      remember("model",t);say(t);tone(180,90,.25,"sawtooth",.12);anim("jolt");setExpr("shock",900)};
+    if(!PROXY_URL){done(cannedRoast())}
+    else fetch(PROXY_URL,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({mode:"roast",ctx:roastCtx(),hist:hist})})
+      .then(function(r){return r.json()}).then(function(d){done(d.a||cannedRoast())}).catch(function(){done(cannedRoast())});
+  }
+}
+setInterval(roastTick,5000);
 
 function updRunKg(){if(typeof run==="undefined")return;var kg=bobKg(fatness());$("rkg").textContent=kg.toFixed(1)+" kg";
   $("rlost").textContent="Lost this set: "+Math.max(0,(run.startKg||kg)-kg).toFixed(1)+" kg";$("rbar").style.width=Math.round((1-fatness())*100)+"%"}

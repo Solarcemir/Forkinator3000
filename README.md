@@ -20,7 +20,7 @@ A web page on your laptop turns every miss into a show:
                                                              └─────────────────────────────────┘
 ```
 
-1. **The fork decides by itself.** The ESP32 reads the HC-SR04 every 60 ms. If the food is 6 cm or closer on 2 readings in a row, it turns the servo to 90°, holds it 0.9 s and turns it back. A 1.5 s cooldown stops it from re-firing. The fork works without the laptop.
+1. **The fork decides by itself.** The ESP32 reads the HC-SR04 every 60 ms. If the food is 10 cm or closer on 2 readings in a row, it turns the servo to 90°, holds it 0.9 s and turns it back. A 1.5 s cooldown stops it from re-firing. The fork works without the laptop.
 2. **It reports to the page.** Over USB serial at 115200 baud, the ESP32 prints `DIST:<cm>` every 200 ms and `BEND` on every flick. The page connects with the Web Serial API (Chrome/Edge).
 3. **The page reacts to every `BEND`:**
    - Plankton (`assets/plankton.jpeg` + `sounds/plankton.mp3`) slams in over the whole screen for 2.5–4 s.
@@ -91,7 +91,7 @@ Open **http://localhost:8765/overlord-bob.html**.
 | 🎩 Style | Hats, glasses and extras for Bob |
 | 💬 | Ask Bob something |
 
-Without hardware, drag the distance slider in the sensor panel to 6 cm or less to trigger a flick.
+Without hardware, drag the distance slider in the sensor panel to 10 cm or less to trigger a flick.
 
 ## 2. Build and flash the fork
 
@@ -138,7 +138,7 @@ Check it works: open a serial monitor at **115200** baud. You should see `DIST:`
 | Setting | Default | What it does |
 |---|---|---|
 | `PIN_SERVO`, `PIN_TRIG`, `PIN_ECHO` | 18, 26, 27 | GPIO pins |
-| `TRIGGER_CM` | 6 | Distance that triggers a flick. Also change `TRIGGER_CM` in the HTML. |
+| `TRIGGER_CM` | 10 | Distance that triggers a flick. Also change `TRIGGER_CM` in the HTML. |
 | `SERVO_FLICK` | 90° | How far the servo turns |
 | `HOLD_MS` | 900 ms | How long it stays turned |
 | `COOLDOWN_MS` | 1500 ms | Minimum time between flicks |

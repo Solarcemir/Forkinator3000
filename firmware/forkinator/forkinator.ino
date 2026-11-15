@@ -12,7 +12,7 @@ const int PIN_SERVO = 18;
 const int PIN_TRIG  = 26;
 const int PIN_ECHO  = 27;   // through the 1k/2k divider: HC-SR04 Echo is 5 V
 
-const float TRIGGER_CM   = 6.0;   // keep in sync with TRIGGER_CM in the page
+const float TRIGGER_CM   = 10.0;   // keep in sync with TRIGGER_CM in the page
 const int   SERVO_REST   = 0;
 const int   SERVO_FLICK  = 90;
 const unsigned long HOLD_MS     = 900;
