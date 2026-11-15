@@ -52,9 +52,26 @@ input[type=range]{width:100%;accent-color:var(--hot)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:800;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
 .toast.on{opacity:1}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.intro{position:fixed;inset:0;z-index:50;background:var(--bg);display:grid;place-items:center;padding:16px;overflow:auto}
+.intro .box{max-width:420px;width:100%;text-align:center}
+#cam{width:100%;max-width:300px;border:3px solid var(--ink);border-radius:50%;aspect-ratio:1;object-fit:cover;transform:scaleX(-1);margin:8px 0}
+label.btn{display:inline-flex;align-items:center;font-weight:800;border:3px solid var(--ink);background:var(--panel);color:var(--ink);border-radius:10px;padding:10px 14px;cursor:pointer;box-shadow:3px 3px 0 var(--shadow);min-height:44px}
+.sens{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:10px;font-size:.9rem}
+.meme{position:fixed;left:50%;top:50%;z-index:40;transform:translate(-50%,-50%) scale(0);transition:transform .2s;text-align:center;pointer-events:none;background:var(--panel);border:4px solid var(--ink);border-radius:16px;padding:10px;box-shadow:8px 8px 0 var(--shadow);max-width:80vw}
+.meme.on{transform:translate(-50%,-50%) scale(1) rotate(-3deg)}
+.meme img{max-width:min(60vw,260px);max-height:40vh;display:block;margin:0 auto}
+.meme div{font-weight:900;margin-top:6px}
+.meme{background:none;border:0;box-shadow:none;padding:0;opacity:0;transform:translate(-50%,-50%);transition:opacity .4s}
+.meme.on{opacity:1;transform:translate(-50%,-50%)}
+.meme div{display:none}
+.meme img{max-width:min(70vw,420px);max-height:60vh;filter:drop-shadow(6px 6px 0 var(--shadow))}
+#camwrap{position:relative;width:100%;max-width:320px;aspect-ratio:4/3;margin:0 auto 8px}
+#cv,#cc{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1);border-radius:10px;border:3px solid var(--ink);object-fit:cover}
 </style>
 </head>
 <body>
+<div class="meme" id="meme"><img id="memeimg" alt=""><div id="memecap"></div></div>
 <main>
 <h1>Overlord Bob’s Fork of Shame</h1>
 <p class="sub">The fork bends when food gets close. Bob transforms. Science is not involved.</p>
@@ -78,6 +95,7 @@ input[type=range]{width:100%;accent-color:var(--hot)}
       <div class="stats">
         <div><b id="bends">0</b>bends</div>
         <div><b id="pizza">0</b>pizza slices dodged</div>
+        <div><b id="steps">0</b>steps run</div>
         <div><b id="tier">0%</b>Overlord progress</div>
       </div>
     </section>
@@ -95,9 +113,21 @@ input[type=range]{width:100%;accent-color:var(--hot)}
       <input type="range" id="prox" min="0" max="100" value="0">
       <div class="row">
         <button id="sim">Simulate bend</button>
-        <button class="ghost" id="ser">Connect real fork</button>
+        <button class="ghost" id="ble">Connect fork (Bluetooth)</button>
+        <button class="ghost" id="ser">Connect fork (USB)</button>
+      </div>
+      <div class="row" style="justify-content:center"><label>Baud <input id="baud" type="number" value="115200" style="width:110px;padding:6px;border:3px solid var(--ink);border-radius:8px;background:var(--panel);color:var(--ink);font:inherit"></label></div>
+      <div class="sens"><span>Ultrasonic: <b id="s_us">--</b> cm</span><span>IR: <b id="s_ir">--</b></span><span>Servo: <b id="s_sv">--</b>&deg;</span></div>
+      <div class="row" hidden>
       </div>
       <ol id="log"></ol>
+    </section>
+
+    <section class="box">
+      <h2>Exercise mode: run on the spot</h2>
+      <div id="camwrap" hidden><video id="cv" playsinline muted></video><canvas id="cc" width="480" height="360"></canvas></div>
+      <div id="camst">Bob wants proof you’re moving. Stand back so he can see your knees. Video never leaves your browser.</div>
+      <div class="row"><button id="camb">Start camera</button></div>
     </section>
   </div>
 </div>
@@ -140,6 +170,8 @@ var sfx={
 /* Bob */
 var svg=$("bob");
 function fatness(){return Math.max(0,Math.min(1,1-state.cal/GOAL))}
+var POU="assets/pou.png",pouOK=false;
+var pouImg=new Image();pouImg.onload=function(){pouOK=true;render()};pouImg.src=POU;
 function drawBob(){
   var f=fatness(),m=1-f;
   var sw=34+34*m, bulge=26+62*f+6*m, ww=22+44*f;
@@ -157,14 +189,15 @@ function drawBob(){
   s+='<line x1="'+(100+ax)+'" y1="'+ay+'" x2="'+(100+hx+6)+'" y2="'+hy+'" stroke="#ffc9a3" stroke-width="'+armW+'" stroke-linecap="round"/>';
   if(m>.35){var r=6+18*m;s+='<circle cx="'+(100-hx+2)+'" cy="'+(hy-26)+'" r="'+r+'" fill="#ffc9a3" stroke="#1b1230" stroke-width="3"/><circle cx="'+(100+hx-2)+'" cy="'+(hy-26)+'" r="'+r+'" fill="#ffc9a3" stroke="#1b1230" stroke-width="3"/>'}
   s+='<circle cx="'+(100-hx-6)+'" cy="'+hy+'" r="'+(8+5*m)+'" fill="#ffc9a3" stroke="#1b1230" stroke-width="3"/><circle cx="'+(100+hx+6)+'" cy="'+hy+'" r="'+(8+5*m)+'" fill="#ffc9a3" stroke="#1b1230" stroke-width="3"/>';
-  var hr=26+10*f;
-  s+='<circle cx="100" cy="64" r="'+hr+'" fill="#ffc9a3" stroke="#1b1230" stroke-width="3"/>';
-  if(f>.5){s+='<ellipse cx="'+(100-hr+6)+'" cy="76" rx="9" ry="6" fill="#ff9aa8" opacity=".6"/><ellipse cx="'+(100+hr-6)+'" cy="76" rx="9" ry="6" fill="#ff9aa8" opacity=".6"/>'}
+  var hr=32+10*f,rx=hr*(0.92+0.28*f);
+  if(pouOK){s+='<image href="'+POU+'" x="'+(100-rx*1.15)+'" y="'+(64-hr*1.15)+'" width="'+(2.3*rx)+'" height="'+(2.3*hr)+'" preserveAspectRatio="xMidYMid meet"/>'}
+  else{s+='<ellipse cx="100" cy="64" rx="'+rx+'" ry="'+hr+'" fill="#ffc9a3" stroke="#1b1230" stroke-width="3"/>'}
+  if(!pouOK&&f>.5){s+='<ellipse cx="'+(100-hr+6)+'" cy="76" rx="9" ry="6" fill="#ff9aa8" opacity=".6"/><ellipse cx="'+(100+hr-6)+'" cy="76" rx="9" ry="6" fill="#ff9aa8" opacity=".6"/>'}
   if(m>.7){
     s+='<rect x="68" y="55" width="64" height="16" rx="6" fill="#1b1230"/><rect x="98" y="58" width="4" height="8" fill="#ffe94d"/>';
     s+='<path d="M84 84h32" stroke="#1b1230" stroke-width="5" stroke-linecap="round"/>';
     s+='<path d="M72 34l8 12 10-14 10 14 10-14 10 14 8-12v14H72z" fill="#ffd400" stroke="#1b1230" stroke-width="3"/>';
-  }else{
+  }else if(!pouOK){
     s+='<circle cx="88" cy="60" r="'+(4+2*f)+'" fill="#1b1230"/><circle cx="112" cy="60" r="'+(4+2*f)+'" fill="#1b1230"/>';
     var mo=f>.6?'M84 80 Q100 98 116 80':(f>.3?'M88 84 Q100 88 112 84':'M88 88 Q100 80 112 88');
     s+='<path d="'+mo+'" stroke="#1b1230" stroke-width="3.5" fill="none" stroke-linecap="round"/>';
@@ -184,6 +217,7 @@ var lastIdx=-1;
 function render(){
   $("cal").textContent=Math.max(0,Math.round(state.cal)).toLocaleString();
   $("bends").textContent=state.bends;
+  $("steps").textContent=cam.steps;
   $("pizza").textContent=(Math.max(0,state.cal)/285).toFixed(1);
   var i=drawBob();
   if(i!==lastIdx&&lastIdx!==-1){ if(i<lastIdx){ i===0?sfx.fanfare():sfx.flex() } else sfx.sad() }
@@ -198,16 +232,16 @@ function bend(){
   state.cal+=fd[1];state.bends++;
   var tip=$("tip");tip.style.transform="rotate(-62deg)";
   setTimeout(function(){tip.style.transform="rotate(0)"},900);
-  sfx.boing();shake();
+  shake();
   var li=document.createElement("li");li.textContent="Fork refused "+fd[2]+" "+fd[0]+" (+"+fd[1]+" cal saved)";
   var log=$("log");log.insertBefore(li,log.firstChild);while(log.children.length>6)log.removeChild(log.lastChild);
-  toast("Fork bent! "+fd[2]+" denied.");
+  toast("Fork bent! "+fd[2]+" denied.");showMeme();
   render();
 }
 $("sim").onclick=bend;
 var cooldown=false;
 $("prox").oninput=function(e){
-  var v=+e.target.value;$("proxv").textContent=v;
+  var v=+e.target.value;$("proxv").textContent=v;setSens(Math.round(40-v*.37),v>=90?"BLOCKED":"clear",v>=90?90:0);
   $("tip").style.transform="rotate("+(-v*0.35)+"deg)";
   if(v>=90&&!cooldown){cooldown=true;bend();setTimeout(function(){cooldown=false},1500)}
 };
@@ -229,20 +263,106 @@ $("feed").onclick=function(){
 };
 $("mute").onclick=function(){state.muted=!state.muted;this.textContent="Sound: "+(state.muted?"off":"on")};
 
+/* Sensor protocol: one line each: US:23.5  IR:1  SERVO:90  HIT (or BEND) */
+function setSens(us,ir,sv){if(us!=null)$("s_us").textContent=us;if(ir!=null)$("s_ir").textContent=ir;if(sv!=null)$("s_sv").textContent=sv}
+function parseLine(l){l=(l||"").trim().toUpperCase();if(!l)return;
+  if(l==="BEND"||l==="HIT"){bend();return}
+  var m=l.match(/^(US|DIST|IR|SERVO):\s*(-?[\d.]+)/);if(!m)return;
+  if(m[1]==="IR")setSens(null,+m[2]?"BLOCKED":"clear");else if(m[1]==="SERVO")setSens(null,null,m[2]);else setSens(m[2]);
+}
+
+/* Memes: one pops up on every hit. Add your own {src,cap} entries (gif/svg/png paths) */
+var PLANK_IMG="assets/plankton.png",PLANK_SND="assets/plankton.mp3";
+var plImg=false,plSnd=false,plAud=new Audio(PLANK_SND);plAud.preload="auto";
+plAud.addEventListener("canplaythrough",function(){plSnd=true});
+$("memeimg").onload=function(){plImg=true};$("memeimg").src=PLANK_IMG;
+function showMeme(){
+  var el=$("meme");
+  if(plImg){el.classList.add("on");clearTimeout(showMeme.t);showMeme.t=setTimeout(function(){el.classList.remove("on")},1500)}
+  if(plSnd&&!state.muted){try{plAud.currentTime=0;plAud.play()}catch(e){sfx.boing()}}else sfx.boing();
+}
+
+
+/* Camera exercise mode: counts alternating knee lifts (running on the spot) */
+var STEP_CAL=15,KNEE_GAP=0.05;
+var cam={on:false,steps:0,dir:0,lastStep:0,lastT:-1,lm:null,stream:null,status:""};
+function camStatus(t){if(cam.status!==t){cam.status=t;$("camst").textContent=t}}
+function stopCam(){
+  cam.on=false;
+  if(cam.stream)cam.stream.getTracks().forEach(function(t){t.stop()});
+  if(cam.lm){try{cam.lm.close()}catch(e){}cam.lm=null}
+  $("camwrap").hidden=true;$("camb").textContent="Start camera";camStatus("Camera off. Bob is already forgetting you.");
+}
+function camStep(){
+  cam.steps++;cam.lastStep=performance.now();state.cal+=STEP_CAL;
+  tone(700+Math.random()*200,500,.06,"square",.06);render();
+}
+function camLoop(){
+  if(!cam.on)return;
+  var v=$("cv");
+  if(v.readyState>=2&&v.currentTime!==cam.lastT){
+    cam.lastT=v.currentTime;
+    var r=cam.lm.detectForVideo(v,performance.now());
+    var c=$("cc"),g=c.getContext("2d"),p=r.landmarks&&r.landmarks[0];
+    g.clearRect(0,0,c.width,c.height);
+    if(p&&(p[25].visibility||0)>.4&&(p[26].visibility||0)>.4){
+      [p[25],p[26]].forEach(function(k){g.beginPath();g.arc(k.x*c.width,k.y*c.height,7,0,7);g.fillStyle="#ff3d81";g.fill()});
+      var d=p[25].y-p[26].y;
+      if(d>KNEE_GAP){if(cam.dir===-1)camStep();cam.dir=1}
+      else if(d<-KNEE_GAP){if(cam.dir===1)camStep();cam.dir=-1}
+      camStatus(performance.now()-cam.lastStep<1500?"Bob sees you RUNNING. He is proud and slightly scared.":"Bob sees you standing. Disappointing.");
+    }else{camStatus("Bob can’t see your knees. Step back.")}
+  }
+  requestAnimationFrame(camLoop);
+}
+$("camb").onclick=async function(){
+  if(cam.on){stopCam();return}
+  try{
+    camStatus("Loading Bob’s eyes…");
+    var V="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+    var mp=await import(V+"/+esm");
+    var fs=await mp.FilesetResolver.forVisionTasks(V+"/wasm");
+    cam.lm=await mp.PoseLandmarker.createFromOptions(fs,{
+      baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"},
+      runningMode:"VIDEO",numPoses:1});
+    cam.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:480,height:360}});
+    var v=$("cv");v.srcObject=cam.stream;$("camwrap").hidden=false;await v.play();
+    cam.on=true;cam.dir=0;cam.lastStep=0;$("camb").textContent="Stop camera";camLoop();
+  }catch(e){stopCam();camStatus("Camera or pose model failed to load. Check permissions and internet.")}
+};
+
 /* Real fork over Web Serial (device prints "BEND" per line) */
 $("ser").onclick=async function(){
   try{
     if(!navigator.serial){toast("Web Serial not supported here. Use Chrome and host the page yourself.");return}
-    var port=await navigator.serial.requestPort();await port.open({baudRate:9600});
+    var port=await navigator.serial.requestPort();await port.open({baudRate:+$("baud").value||115200});
     toast("Fork connected. Go be disappointed.");
     var dec=new TextDecoderStream();port.readable.pipeTo(dec.writable);
     var rd=dec.readable.getReader(),buf="";
     while(true){var r=await rd.read();if(r.done)break;buf+=r.value;var ln=buf.split("\n");buf=ln.pop();
-      ln.forEach(function(l){if(l.trim().toUpperCase()==="BEND")bend()})}
+      ln.forEach(parseLine)}
+  }catch(e){toast("Fork connection failed.")}
+};
+
+/* Real fork over Bluetooth (ESP32 notifies "BEND") */
+var SVC="6e400001-b5a3-f393-e0a9-e50e24dcca9e",CHR="6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+$("ble").onclick=async function(){
+  try{
+    if(!navigator.bluetooth){toast("Web Bluetooth needs Chrome or Edge on desktop or Android.");return}
+    var dev=await navigator.bluetooth.requestDevice({filters:[{services:[SVC]}]});
+    dev.addEventListener("gattserverdisconnected",function(){toast("Fork disconnected. Did Bob eat it?")});
+    var gatt=await dev.gatt.connect();
+    var chr=await (await gatt.getPrimaryService(SVC)).getCharacteristic(CHR);
+    await chr.startNotifications();
+    chr.addEventListener("characteristicvaluechanged",function(e){
+      new TextDecoder().decode(e.target.value).split("\n").forEach(parseLine);
+    });
+    toast("Fork connected. Go be disappointed.");
   }catch(e){toast("Fork connection failed.")}
 };
 
 /* BobGPT */
+var PROXY_URL=""; /* paste your Cloudflare Worker URL here to make BobGPT real */
 var jokes=[
  "Fitness tip: the best rep is the one where you walk away from the fridge. Bob counts it as cardio.",
  "To get abs, simply stare at a fork until your core gets embarrassed.",
@@ -268,7 +388,11 @@ function ask(){
   var q=$("q").value.trim();if(!q)return;$("q").value="";
   add("me",q);var th=add("ai","BobGPT is thinking…");
   tone(500,700,.1,"square",.1);
-  setTimeout(function(){th.textContent="BobGPT: "+pick();sfx.boing()},700);
+  var done=function(t){th.textContent="BobGPT: "+t;sfx.boing()};
+  if(!PROXY_URL){setTimeout(function(){done(pick())},700);return}
+  fetch(PROXY_URL,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({q:q})})
+    .then(function(r){return r.json()}).then(function(d){done(d.a||pick())})
+    .catch(function(){done(pick())});
 }
 $("send").onclick=ask;
 $("q").addEventListener("keydown",function(e){if(e.key==="Enter"){e.preventDefault();ask()}});
