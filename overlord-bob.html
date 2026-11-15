@@ -68,6 +68,8 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 /* character */
 .char{position:absolute;left:50%;bottom:calc(37% + 10px);transform:translateX(-50%);width:min(38vh,320px);z-index:5}
 #bob{display:block;width:100%;height:auto;overflow:visible;transform-origin:50% 100%;animation:idle 2.6s ease-in-out infinite}
+#bob.talking{animation:talk .16s ease-in-out infinite alternate}
+@keyframes talk{from{transform:scale(1,1)}to{transform:scale(1.03,.96)}}
 @keyframes idle{0%,100%{transform:scale(1,1)}50%{transform:scale(1.025,.975)}}
 #bob.jolt{animation:jolt .55s ease-out}
 @keyframes jolt{0%{transform:scale(1,1)}20%{transform:scale(.88,1.14) translateY(-14px)}45%{transform:scale(1.12,.9)}70%{transform:scale(.97,1.03)}100%{transform:scale(1,1)}}
@@ -131,6 +133,8 @@ input[type=range]{width:100%;accent-color:var(--hot);margin:6px 0 0}
 .askf button{border:0;border-radius:999px;background:var(--ink);color:var(--wall);padding:0 18px;font-weight:800}
 
 .corner{position:absolute;right:16px;top:14px;z-index:7;display:flex;gap:8px}
+.corner select{border:0;background:var(--sub);color:#fff;border-radius:10px;padding:7px 10px;font:inherit;font-weight:800;font-size:.82rem;min-height:36px;cursor:pointer}
+.corner select option{color:#000}
 .corner button{border:0;background:var(--sub);color:#fff;border-radius:10px;padding:7px 12px;font-weight:800;font-size:.82rem;min-height:36px}
 
 .fly{position:absolute;font-size:2.2rem;pointer-events:none;z-index:9;animation:fly .9s ease-in forwards}
@@ -259,6 +263,7 @@ dialog::backdrop{background:rgba(25,18,30,.55)}
   </div>
 
   <div class="corner">
+    <select id="persona" aria-label="Bob's personality"></select>
     <button id="stylebtn">🎩 Style</button>
     <button id="mute" aria-pressed="false">🔊 Sound</button>
   </div>
@@ -569,10 +574,15 @@ var typeT=null;
 var lastSayAt=0;
 var hideT=null;
 function readMs(t){return Math.min(12000,2500+t.length*55)}   // ~2.5 s + time to read each character, max 12 s
+function hideLine(ms){var el=$("line");clearTimeout(hideT);hideT=setTimeout(function(){el.classList.add("gone");hideT=setTimeout(function(){el.textContent=""},600)},ms)}
 function say(t,hold){
   lastSayAt=Date.now();var el=$("line");clearInterval(typeT);clearTimeout(hideT);el.classList.remove("gone");el.textContent="";var i=0;
+  var spoken=false,typed=false;
+  var voiced=!hold&&!$("plank").classList.contains("on")&&typeof speak==="function"&&speak(t,function(){spoken=true;lastSayAt=Date.now();if(typed)hideLine(1200)});
+  if(hold&&typeof stopVoice==="function")stopVoice();
   typeT=setInterval(function(){i+=2;el.textContent=t.slice(0,i);
-    if(i>=t.length){clearInterval(typeT);if(!hold)hideT=setTimeout(function(){el.classList.add("gone");hideT=setTimeout(function(){el.textContent=""},600)},readMs(t))}},22);
+    if(i>=t.length){clearInterval(typeT);typed=true;if(hold)return;
+      if(!voiced)hideLine(readMs(t));else if(spoken)hideLine(1200);else hideLine(readMs(t)+15000)}},22);   // safety timeout if the voice never ends
 }
 function toast(t){var el=$("toast");el.textContent=t;el.classList.add("on");clearTimeout(toast.t);toast.t=setTimeout(function(){el.classList.remove("on")},1800)}
 function anim(cls){svg.classList.remove("jolt","chomp","squeeze");void svg.getBoundingClientRect();svg.classList.add(cls)}
@@ -796,6 +806,51 @@ var roasts=[
 var bag=[];
 function pick(){if(!bag.length){bag=jokes.map(function(_,i){return i});for(var i=bag.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=bag[i];bag[i]=bag[j];bag[j]=t}}return jokes[bag.pop()]}
 $("askbtn").onclick=function(){$("askf").classList.add("on");this.classList.add("hide");$("q").focus()};
+/* ---------- styles + voice ----------
+   Voice: ElevenLabs through server.py if ELEVENLABS_API_KEY is in .env, otherwise the browser's free speech voice. */
+var PERSONAS={
+  blob:       {label:"🫠 Unhinged blob", lang:"en-US",pitch:1.35,rate:1.08},
+  mexicano:   {label:"🇲🇽 Mexicano",      lang:"es-MX",pitch:1.05,rate:1.05},
+  canadian:   {label:"🇨🇦 Canadian",      lang:"en-CA",pitch:1.1, rate:1},
+  gym:        {label:"💪 Gym bro",        lang:"en-US",pitch:.75, rate:1.15},
+  pirate:     {label:"🏴‍☠️ Pirate",        lang:"en-GB",pitch:.7,  rate:.95},
+  abuela:     {label:"👵 Abuela",         lang:"en-US",pitch:1.6, rate:.9},
+  villain:    {label:"😈 Anime villain",  lang:"en-US",pitch:.55, rate:.92},
+  surfer:     {label:"🏄 Surfer",         lang:"en-AU",pitch:1,   rate:.85},
+  shakespeare:{label:"🎭 Shakespeare",    lang:"en-GB",pitch:.9,  rate:.9}
+};
+state.persona="blob";
+try{var _p=localStorage.getItem("fork.persona");if(_p&&PERSONAS[_p])state.persona=_p}catch(e){}
+var voiceMode=null, curAudio=null;   // voiceMode: null (unknown yet) | "eleven" | "browser"
+function pickVoice(lang){
+  if(!("speechSynthesis" in window))return null;var vs=speechSynthesis.getVoices();
+  return vs.find(function(v){return v.lang===lang})||vs.find(function(v){return v.lang.replace("_","-").indexOf(lang.slice(0,2))===0})||null;
+}
+function stopVoice(){try{speechSynthesis.cancel()}catch(e){}if(curAudio){try{curAudio.pause()}catch(e){}curAudio=null}svg.classList.remove("talking")}
+function speak(t,onend){
+  if(state.muted||!t)return false;
+  stopVoice();
+  var P=PERSONAS[state.persona]||PERSONAS.blob,done=false;
+  var fin=function(){if(done)return;done=true;svg.classList.remove("talking");if(onend)onend()};
+  var clean=t.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]/gu,"");
+  var browser=function(){
+    if(!("speechSynthesis" in window)){fin();return}
+    var u=new SpeechSynthesisUtterance(clean);u.lang=P.lang;u.pitch=P.pitch;u.rate=P.rate;
+    var v=pickVoice(P.lang);if(v)u.voice=v;u.onend=fin;u.onerror=fin;
+    svg.classList.add("talking");speechSynthesis.speak(u);
+  };
+  if(voiceMode==="browser"){browser();return true}
+  fetch("/api/tts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({text:clean,persona:state.persona})})
+    .then(function(r){if(r.status!==200){voiceMode="browser";throw 0}voiceMode="eleven";return r.blob()})
+    .then(function(b){if(done||state.muted){fin();return}var a=new Audio(URL.createObjectURL(b));curAudio=a;a.onended=fin;a.onerror=fin;
+      svg.classList.add("talking");return a.play()})
+    .catch(function(){if(!done)browser()});
+  return true;
+}
+if("speechSynthesis" in window){try{speechSynthesis.getVoices();speechSynthesis.onvoiceschanged=function(){}}catch(e){}}
+function bobFetch(body){body.persona=state.persona;
+  return fetch(PROXY_URL,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}).then(function(r){return r.json()})}
+
 var lastChatAt=Date.now(), hist=[];                // hist: last few turns so Bob can follow the conversation
 function remember(role,t){hist.push({role:role,text:String(t).slice(0,300)});if(hist.length>10)hist=hist.slice(-10)}
 var thinking=["hmm","wait","ok ok ok","hold on","ugh FINE","...","lemme think","oh no"];
@@ -803,14 +858,14 @@ $("askf").onsubmit=function(e){e.preventDefault();var q=$("q").value.trim();if(!
   sfx.blip();say(thinking[Math.floor(Math.random()*thinking.length)]+"…",true);
   var done=function(t){remember("user",q);remember("model",t);say(t);sfx.boing();anim("jolt")};
   if(!PROXY_URL){setTimeout(function(){done(pick())},1300);return}
-  fetch(PROXY_URL,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({q:q,hist:hist,ctx:roastCtx()})})
-    .then(function(r){return r.json()}).then(function(d){if(d.error)console.warn("BobGPT:",d.error);done(d.a||pick())})
+  bobFetch({q:q,hist:hist,ctx:roastCtx()})
+    .then(function(d){if(d.error)console.warn("BobGPT:",d.error);done(d.a||pick())})
     .catch(function(){done(pick())});
 };
 $("q").addEventListener("keydown",function(e){if(e.key==="Escape"){$("askf").classList.remove("on");$("askbtn").classList.remove("hide")}});
 
-/* ---------- idle roasts: if nobody talks to Bob for a while, he roasts you ---------- */
-var ROAST_IDLE_MS=45000, ROAST_EVERY_MS=[40000,80000];   // quiet time before the first roast, gap between roasts
+/* ---------- idle talk: if nobody talks to Bob for a while, he blurts out something funny or roasts you ---------- */
+var ROAST_IDLE_MS=35000, ROAST_EVERY_MS=[30000,60000], RIFF_CHANCE=.6;   // quiet time before Bob talks, gap between, share of jokes vs roasts
 function roastStats(){return {bends:state.bends,jacks:run.steps,cal:Math.round(state.cal).toLocaleString(),kg:Math.round(bobKg(fatness())),rank:names[lastIdx<0?4:lastIdx]}}
 function roastCtx(){var r=roastStats();return "fork denied them "+r.bends+" times, "+r.jacks+" jumping jacks done, "+r.cal+" calories not eaten, Bob weighs "+r.kg+" kg, Bob's rank: "+r.rank+(state.face?", the human put their own face on Bob":"")}
 function cannedRoast(){var r=roastStats();return roasts[Math.floor(Math.random()*roasts.length)].replace(/\{(\w+)\}/g,function(_,k){return r[k]})}
@@ -819,11 +874,12 @@ function roastTick(){
   var now=Date.now(),busy=roastBusy||dlg.open||sty.open||run.on||$("plank").classList.contains("on")||document.hidden;
   if(!busy&&now-lastChatAt>ROAST_IDLE_MS&&now-lastSayAt>15000){
     roastBusy=true;
+    var mode=Math.random()<RIFF_CHANCE?"riff":"roast";
     var done=function(t){roastBusy=false;lastChatAt=Date.now()-ROAST_IDLE_MS+ROAST_EVERY_MS[0]+Math.random()*(ROAST_EVERY_MS[1]-ROAST_EVERY_MS[0]);
-      remember("model",t);say(t);tone(180,90,.25,"sawtooth",.12);anim("jolt");setExpr("shock",900)};
-    if(!PROXY_URL){done(cannedRoast())}
-    else fetch(PROXY_URL,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({mode:"roast",ctx:roastCtx(),hist:hist})})
-      .then(function(r){return r.json()}).then(function(d){done(d.a||cannedRoast())}).catch(function(){done(cannedRoast())});
+      remember("model",t);say(t);anim("jolt");if(mode==="roast"){tone(180,90,.25,"sawtooth",.12);setExpr("shock",900)}};
+    var canned=function(){return mode==="roast"?cannedRoast():pick()};
+    if(!PROXY_URL){done(canned())}
+    else bobFetch({mode:mode,ctx:roastCtx(),hist:hist}).then(function(d){done(d.a||canned())}).catch(function(){done(canned())});
   }
 }
 setInterval(roastTick,5000);
@@ -911,10 +967,21 @@ $("stylebtn").onclick=function(){ac();styOpts();styPrev();sty.showModal()};
 $("stydone").onclick=function(){sty.close();anim("jolt");say(["I look expensive. Feed me nothing.","Fashion is just armor against snacks.","Finally, an outfit worthy of an overlord."][Math.floor(Math.random()*3)])};
 $("styreset").onclick=function(){state.acc={hat:"none",glasses:"none",extra:"none"};saveAcc();styOpts();styPrev();drawBob()};
 
+/* ---------- personality picker ---------- */
+(function(){var sel=$("persona");
+  sel.innerHTML=Object.keys(PERSONAS).map(function(k){return '<option value="'+k+'"'+(k===state.persona?" selected":"")+'>'+PERSONAS[k].label+'</option>'}).join("");
+  sel.onchange=function(){state.persona=sel.value;try{localStorage.setItem("fork.persona",state.persona)}catch(e){}
+    hist=[];stopVoice();ac();say("…",true);anim("jolt");
+    var fallback=PERSONAS[state.persona].label+" mode. don't ask.";
+    if(!PROXY_URL){say(fallback);return}
+    bobFetch({mode:"intro",ctx:roastCtx()}).then(function(d){var t=d.a||fallback;remember("model",t);say(t)}).catch(function(){say(fallback)});
+    lastChatAt=Date.now()};
+})();
+
 /* ---------- wiring ---------- */
 var acts={face:openFace,feed:feed,bend:bend,serial:connect,run:toggleRun};
 document.querySelectorAll(".card").forEach(function(b){b.onclick=function(){ac();acts[b.dataset.act]()}});
-$("mute").onclick=function(){state.muted=!state.muted;this.textContent=state.muted?"🔇 Muted":"🔊 Sound";this.setAttribute("aria-pressed",state.muted);if(state.muted&&lastClip)lastClip.pause()};
+$("mute").onclick=function(){state.muted=!state.muted;this.textContent=state.muted?"🔇 Muted":"🔊 Sound";this.setAttribute("aria-pressed",state.muted);if(state.muted&&lastClip)lastClip.pause();if(state.muted)stopVoice()};
 document.addEventListener("keydown",function(e){
   if(dlg.open||sty.open||e.target.tagName==="INPUT")return;
   var k={"1":"face","2":"feed","3":"bend","4":"serial","5":"run"}[e.key];

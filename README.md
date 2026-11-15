@@ -34,7 +34,14 @@ A web page on your laptop turns every miss into a show:
    - MediaPipe finds your eyes, nose and mouth.
    - Each one is cut out, recolored to Bob's skin and placed at a fixed spot on Bob. The light and shadow are kept, so it still looks like you.
 6. **Jumping jacks.** MediaPipe Pose tracks your wrists, head and shoulders. Hands above your head, then below your shoulders, counts as 1 rep.
-7. **BobGPT.** The chat sends your question to `server.py`, which asks Gemini with a prompt that makes Bob confidently useless. The API key stays on the server, in `.env`.
+7. **BobGPT.** Bob is an unhinged little guy who texts like a real person and remembers the chat.
+   - The chat sends your message, the last few messages and the live stats to `server.py`, which asks Gemini. The API key stays on the server, in `.env`.
+   - When nobody talks to him for ~35 s, he blurts out something on his own: a cursed thought or a roast built from your stats.
+   - Pick his **style** in the top-right menu: 🫠 Unhinged blob, 🇲🇽 Mexicano (speaks Mexican Spanish), 🇨🇦 Canadian, 💪 Gym bro, 🏴‍☠️ Pirate, 👵 Abuela, 😈 Anime villain, 🏄 Surfer, 🎭 Shakespeare.
+8. **Voice + captions.** Everything Bob says is spoken out loud, and the caption stays until he finishes talking.
+   - With an ElevenLabs key in `.env`, the voice comes from ElevenLabs.
+   - Without one, the browser's free built-in voice is used, with a different accent, pitch and speed per style.
+   - 🔊 Sound mutes the voice too.
 
 Video from the webcam is processed in the browser and never uploaded.
 
@@ -65,7 +72,14 @@ Create a file called `.env` in the project folder with a [Gemini API key](https:
 ```
 GEMINI_API_KEY=your-key-here
 GEMINI_MODEL=gemini-flash-lite-latest
+
+# optional: ElevenLabs voice (free tier works). Without it, the browser voice is used.
+ELEVENLABS_API_KEY=your-elevenlabs-key
+ELEVENLABS_VOICE=JBFqnCBsd6RMkjVDRZzb        # default voice ID for every style
+ELEVENLABS_VOICE_MEXICANO=voice-id-here      # optional, one per style: _BLOB, _CANADIAN, _GYM, _PIRATE, ...
 ```
+
+Find voice IDs in ElevenLabs under **Voices** (each voice has a "Copy voice ID" button). The default model is `eleven_flash_v2_5`, which speaks Spanish too.
 
 Start the server:
 
@@ -161,6 +175,9 @@ The dot in the sensor panel turns green, and from then on the live distance and 
 | Calories from fat Bob to Overlord | `GOAL` (default 6000) |
 | Where your eyes / nose / mouth go on Bob, skin color | `SPOT`, `BOB_SKIN` in `fuseFace` |
 | Bob's personality | `SYSTEM` in `server.py` |
+| Preset styles | `PERSONAS` in `server.py` (prompt) and `PERSONAS` in the HTML (label, browser accent, pitch, speed) |
+| How often Bob talks on his own | `ROAST_IDLE_MS`, `ROAST_EVERY_MS`, `RIFF_CHANCE` (share of jokes vs roasts) in the HTML |
+| Spontaneous joke topics / roast angles | `RIFF_TOPICS`, `ROAST_ANGLES` in `server.py` |
 | Gemini model | `GEMINI_MODEL` in `.env` |
 
 The style picks, your face photo and the Googly-eyes option are saved in the browser (localStorage). To start fresh, clear the site data.
@@ -181,5 +198,8 @@ Never put an API key in the HTML.
 | ESP32 resets when the servo moves | Add the 1000 µF capacitor, or power the servo from a stronger 5 V source |
 | "Connect the real fork" does nothing | Use Chrome/Edge, open the page via `http://localhost`, close other serial monitors |
 | Bob only tells canned jokes | `.env` missing or wrong key. Check the `server.py` console for the Gemini error. |
+| Bob only tells canned jokes sometimes | `gemini 429` in the console = free-tier rate limit. Wait a minute; Bob falls back to canned lines meanwhile. |
+| Bob is silent | Click anywhere on the page once (browsers block audio until you interact), check 🔊 Sound, and check the system volume. |
+| Voice sounds robotic | That's the free browser voice. Add `ELEVENLABS_API_KEY` to `.env` and restart `server.py`. |
 | Camera doesn't open | Allow camera access in the address bar. The page must be on `http://localhost`. |
 | Buttons do nothing | Hard-reload (Ctrl+F5). If it persists, open DevTools (F12) → Console and check for errors. |

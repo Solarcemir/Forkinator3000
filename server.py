@@ -73,6 +73,93 @@ ROAST_ANGLES = [
 ]
 
 
+# ---------- preset styles (the page sends one of these keys) ----------
+PERSONAS = {
+    "blob": "",
+    "mexicano": (
+        "STYLE: you're Bob as a dramatic Mexican telenovela uncle. Speak Mexican Spanish (a little Spanglish is fine) "
+        "with slang like 'no manches', 'güey', 'qué onda', 'ándale', 'neta', 'chale', 'órale'. Everything is a telenovela plot twist, "
+        "you invoke your tía, your abuela's legendary chancla, your compadre, tacos al pastor at 2am, the lucha libre mask you never take off. "
+        "Affectionate and proud, NEVER mock Mexican people or use stereotypes about them. Reply in Spanish."
+    ),
+    "canadian": (
+        "STYLE: you're Bob as an aggressively polite Canadian. Apologize constantly even while roasting ('sorry but you're kind of a disaster, eh'). "
+        "Hockey, Tim Hortons, double-doubles, maple syrup as a food group, moose as coworkers, beavers as rivals, -40 winters, "
+        "saying 'sorry' to doors. Say 'eh', 'buddy', 'beauty', 'give'r', 'oot and aboot' jokes sparingly."
+    ),
+    "gym": (
+        "STYLE: you're Bob as an ultra-intense gym bro who has never lifted anything. EVERYTHING is about GAINS, protein, 'bro', 'let's GOOO', "
+        "pre-workout (you drink 4 scoops, you can hear colors now), skipping leg day as a lifestyle, your bicep (singular), "
+        "mirror selfies, 'lightweight baby'. Shout random words in CAPS."
+    ),
+    "pirate": (
+        "STYLE: you're Bob as a washed-up pirate captain. 'arr', 'matey', 'ye scallywag', sea shanty energy. "
+        "Your ship sank because it was made of bread. You treat snacks like treasure and the fork like a mutinous first mate."
+    ),
+    "abuela": (
+        "STYLE: you're Bob as an overbearing grandma. You fuss about EVERYTHING except people's bodies or looks: "
+        "did they eat, why no jacket, when are they getting married, why don't they call, their messy room. "
+        "'mijo/mija', passive-aggressive guilt, forcing leftovers on them, stories about the old days that make no sense, "
+        "threatening to call their mother. Warm, chaotic, contradictory. Never comment on weight, size, thinness or appearance."
+    ),
+    "villain": (
+        "STYLE: you're Bob as a dramatic anime villain. Monologue energy, evil laughs written out (MUAHAHA, fufufu), "
+        "naming your attacks ('FORBIDDEN TECHNIQUE: FORK OF DENIAL'), calling the human your rival, plans that are way too elaborate for snacks."
+    ),
+    "surfer": (
+        "STYLE: you're Bob as a super chill, half-asleep surfer dude. 'duuude', 'gnarly', 'totally', 'bro', 'vibes'. "
+        "Everything reminds you of waves, the ocean talks to you, you're bad at finishing your senten"
+    ),
+    "shakespeare": (
+        "STYLE: you're Bob as an overdramatic Shakespearean actor. Thee, thou, forsooth, alas, dramatic soliloquies about snacks, "
+        "the fork as a tragic villain, every small thing is a tragedy in five acts. Still short."
+    ),
+}
+
+RIFF = """Nobody asked you anything. Out of nowhere, say ONE extremely funny thing to the human, like a friend blurting out a cursed thought. Topic for this one: {topic}.
+Be specific and surprising, not random word salad. A short story, a hot take, a confession or a question works great. Under 35 words. Don't repeat anything you said in this chat."""
+
+RIFF_TOPICS = [
+    "a weird confession about something you did last night",
+    "a deeply wrong hot take about a common food",
+    "a conspiracy theory you fully believe",
+    "drama between you and the fork",
+    "a terrible business idea you want them to invest in",
+    "a fake fun fact said with total confidence",
+    "a dream you had that you need them to interpret",
+    "the human's snacking choices, judged dramatically",
+    "a petty grudge against an inanimate object in the kitchen",
+    "an unhinged workout you invented",
+    "what Plankton texted you this morning",
+    "something you overheard from inside the screen",
+]
+
+INTRO = """You just switched into this style. Introduce your new self to the human in one short, very funny line, fully in character. Under 25 words."""
+
+
+def persona_system(base, persona):
+    extra = PERSONAS.get(persona or "blob", "")
+    return base + ("\n\n" + extra + " Keep every other rule above, especially the safety rules." if extra else "")
+
+
+# ---------- voice: ElevenLabs if a key is in .env, otherwise the page uses the browser's free voice ----------
+EL_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+EL_MODEL = os.environ.get("ELEVENLABS_MODEL", "eleven_flash_v2_5")
+EL_DEFAULT_VOICE = os.environ.get("ELEVENLABS_VOICE", "JBFqnCBsd6RMkjVDRZzb")
+
+
+def eleven_tts(text, persona):
+    voice = os.environ.get("ELEVENLABS_VOICE_" + (persona or "blob").upper(), EL_DEFAULT_VOICE)
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_64"
+    body = {"text": text[:400], "model_id": EL_MODEL,
+            "voice_settings": {"stability": 0.3, "similarity_boost": 0.75, "style": 0.6}}
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
+                                 headers={"content-type": "application/json", "xi-api-key": EL_KEY, "accept": "audio/mpeg"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return r.read()
+
+
+
 def to_contents(hist, last):
     """Turn the page's recent chat into Gemini turns so Bob can follow the conversation."""
     out = []
@@ -122,32 +209,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
-    def do_POST(self):
-        if self.path != "/api/bob":
-            self.send_error(404)
-            return
-        try:
-            n = int(self.headers.get("content-length", 0))
-            req = json.loads(self.rfile.read(min(n, 16384)) or b"{}")
-            q = str(req.get("q") or "").strip()
-            hist = req.get("hist") if isinstance(req.get("hist"), list) else []
-            ctx = str(req.get("ctx") or "no stats")[:400]
-            if not KEY:
-                raise RuntimeError("GEMINI_API_KEY missing in .env")
-            if req.get("mode") == "roast":
-                out, code = {"a": ask_gemini("(silence. they're just staring at you.)",
-                                             SYSTEM + "\n\n" + ROAST.format(ctx=ctx, angle=random.choice(ROAST_ANGLES)), hist)}, 200
-            elif q:
-                sys_live = SYSTEM + "\n\nWhat's happening on the site right now (use only if it fits): " + ctx
-                out, code = {"a": ask_gemini(q, sys_live, hist)}, 200
-            else:
-                out, code = {"a": "say something. anything. im lonely in here"}, 200
-        except urllib.error.HTTPError as e:
-            print("Gemini error", e.code, e.read()[:300])
-            out, code = {"error": f"gemini {e.code}"}, 502
-        except Exception as e:  # noqa: BLE001
-            print("Bob error:", e)
-            out, code = {"error": str(e)}, 502
+    def send_json(self, code, out):
         raw = json.dumps(out).encode()
         self.send_response(code)
         self.send_header("content-type", "application/json")
@@ -155,7 +217,65 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def read_json(self):
+        n = int(self.headers.get("content-length", 0))
+        return json.loads(self.rfile.read(min(n, 16384)) or b"{}")
+
+    def do_POST(self):
+        if self.path == "/api/tts":
+            return self.do_tts()
+        if self.path != "/api/bob":
+            self.send_error(404)
+            return
+        try:
+            req = self.read_json()
+            q = str(req.get("q") or "").strip()
+            hist = req.get("hist") if isinstance(req.get("hist"), list) else []
+            ctx = str(req.get("ctx") or "no stats")[:400]
+            system = persona_system(SYSTEM, str(req.get("persona") or "blob"))
+            mode = req.get("mode")
+            if not KEY:
+                raise RuntimeError("GEMINI_API_KEY missing in .env")
+            if mode == "roast":
+                a = ask_gemini("(silence. they're just staring at you.)",
+                               system + "\n\n" + ROAST.format(ctx=ctx, angle=random.choice(ROAST_ANGLES)), hist)
+            elif mode == "riff":
+                a = ask_gemini("(silence.)", system + "\n\n" + RIFF.format(topic=random.choice(RIFF_TOPICS))
+                               + "\nSite right now, only if useful: " + ctx, hist)
+            elif mode == "intro":
+                a = ask_gemini("(the human just picked this style for you)", system + "\n\n" + INTRO, [])
+            elif q:
+                a = ask_gemini(q, system + "\n\nWhat's happening on the site right now (use only if it fits): " + ctx, hist)
+            else:
+                a = "say something. anything. im lonely in here"
+            self.send_json(200, {"a": a})
+        except urllib.error.HTTPError as e:
+            print("Gemini error", e.code, e.read()[:300])
+            self.send_json(502, {"error": f"gemini {e.code}"})
+        except Exception as e:  # noqa: BLE001
+            print("Bob error:", e)
+            self.send_json(502, {"error": str(e)})
+
+    def do_tts(self):
+        # 204 = no ElevenLabs key (or it failed): the page falls back to the browser's free voice
+        if not EL_KEY:
+            self.send_response(204)
+            self.end_headers()
+            return
+        try:
+            req = self.read_json()
+            audio = eleven_tts(str(req.get("text") or "")[:400], str(req.get("persona") or "blob"))
+            self.send_response(200)
+            self.send_header("content-type", "audio/mpeg")
+            self.send_header("content-length", str(len(audio)))
+            self.end_headers()
+            self.wfile.write(audio)
+        except Exception as e:  # noqa: BLE001
+            print("ElevenLabs error:", getattr(e, "code", ""), e)
+            self.send_response(204)
+            self.end_headers()
+
 
 if __name__ == "__main__":
-    print(f"Forkinator on http://localhost:{PORT}/overlord-bob.html  (Gemini: {'on' if KEY else 'OFF, no key'}, model {MODEL})")
+    print(f"Forkinator on http://localhost:{PORT}/overlord-bob.html  (Gemini: {'on' if KEY else 'OFF, no key'}, model {MODEL}; voice: {'ElevenLabs' if EL_KEY else 'browser'})")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
