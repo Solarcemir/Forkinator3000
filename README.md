@@ -1,5 +1,13 @@
 # Forkinator 3000
 
+🏆 **Prize winner at StupidHacks 2026**
+
+![The Forkinator 3000: a fork on a 3D-printed handle with an HC-SR04 sensor, an SG90 servo and an ESP32](assets/forkinator.jpg)
+
+**Demo video:**
+
+[![Forkinator 3000 demo video](https://img.youtube.com/vi/IaBw5wTRblE/hqdefault.jpg)](https://youtu.be/IaBw5wTRblE)
+
 A fork that refuses to feed you. An HC-SR04 ultrasonic sensor on the fork watches the food. When you lower the fork to take a bite, an SG90 servo flicks the head 90° and you miss.
 
 A web page on your laptop turns every miss into a show:
